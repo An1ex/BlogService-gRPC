@@ -7,6 +7,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 )
 
 const (
@@ -44,12 +47,34 @@ func (a *API) httpGet(ctx context.Context, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	//// 方法二，自定义Client方法，实现超时
+	// client := http.Client{
+	//	Transport: http.DefaultTransport,
+	//	Timeout:   60 * time.Second,
+	//}
+	//resp, err := client.Do(req)
+	//if err != nil {
+	//	return nil, err
+	//}
 
+	// HTTP追踪部分
+	span, newCtx := opentracing.StartSpanFromContext(ctx, "HTTP GET:"+a.URL, opentracing.Tag{
+		Key:   string(ext.Component),
+		Value: "HTTP",
+	})
+	defer span.Finish()
+
+	span.SetTag("url", path)
+	_ = opentracing.GlobalTracer().Inject(span.Context(), opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(req.Header))
+	// HTTP追踪部分
+
+	req = req.WithContext(newCtx)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
 	body, _ := ioutil.ReadAll(resp.Body)
 	return body, nil
 }

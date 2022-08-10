@@ -15,6 +15,9 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// HTTP和gRPC不同端口的实现
+// http:9090 gRPC:9002
+
 var dPort string
 
 func init() {
@@ -22,7 +25,7 @@ func init() {
 	flag.Parse()
 }
 
-func RunGrpcServer() error {
+func dRungrpcserver() error {
 	lis, err := net.Listen("tcp", ":"+dPort)
 	if err != nil {
 		return err
@@ -37,20 +40,15 @@ func RunGrpcServer() error {
 	return nil
 }
 
-func RunHttpServer() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+func dRunhttpserver() error {
 	endpoint := "localhost:" + dPort
 	gwmux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	err := pb.RegisterTagServiceHandlerFromEndpoint(ctx, gwmux, endpoint, opts)
+	err := pb.RegisterTagServiceHandlerFromEndpoint(context.Background(), gwmux, endpoint, opts)
 	if err != nil {
 		return err
 	}
-	gwmux.Handle("/ping", runtime.Pattern{}, func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
-		_, _ = w.Write([]byte("pong"))
-	})
+
 	err = http.ListenAndServe(":9090", gwmux)
 	if err != nil {
 		return err
@@ -84,13 +82,13 @@ func main() {
 	//不同端口同时起HTTP和gRPC
 	errs := make(chan error)
 	go func() {
-		err := RunGrpcServer()
+		err := dRungrpcserver()
 		if err != nil {
 			errs <- err
 		}
 	}()
 	go func() {
-		err := RunHttpServer()
+		err := dRunhttpserver()
 		if err != nil {
 			errs <- err
 		}

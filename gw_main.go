@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"BlogService-gRPC/internal/middleware"
 	"BlogService-gRPC/pb"
 	"BlogService-gRPC/server"
 
@@ -17,6 +18,9 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
+
+// HTTP和gRPC同端口通过h2c手动分流实现
+// http/gRPC:9002
 
 var sPort string
 
@@ -42,6 +46,7 @@ func RunServer(port string) error {
 	httpMux.Handle("/", gatewayMux)
 	return http.ListenAndServe(":"+port, grpcHandlerFunc(grpcS, httpMux))
 }
+
 func runHttpServer() *http.ServeMux {
 	serveMux := http.NewServeMux()
 	serveMux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -49,8 +54,15 @@ func runHttpServer() *http.ServeMux {
 	})
 	return serveMux
 }
+
 func runGrpcServer() *grpc.Server {
-	s := grpc.NewServer()
+	opts := []grpc.ServerOption{grpc.ChainUnaryInterceptor(
+		middleware.AccessLog,
+		middleware.ErrorLog,
+		middleware.Recovery,
+		middleware.ServerTracing,
+	)}
+	s := grpc.NewServer(opts...)
 	pb.RegisterTagServiceServer(s, &server.TagServer{})
 	reflection.Register(s)
 	return s
