@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "/pb";
+
+message Pager {
+  int64 page = 1;
+  int64 pageSize = 2;
+  int64 totalRows = 3;
+}
