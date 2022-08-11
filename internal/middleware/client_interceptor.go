@@ -51,14 +51,13 @@ func ClientTracing(ctx context.Context, method string, req, reply interface{}, c
 		spanOpts = append(spanOpts, opentracing.ChildOf(parentSpan.Context()))
 	}
 
-	// 设置当前跨度的信息和标签，生成跨度
+	// 设置当前Span的信息和标签，生成Span
 	spanOpts = append(spanOpts, opentracing.Tag{Key: string(ext.Component), Value: "gRPC"}, ext.SpanKindRPCClient)
 	tracer := opentracing.GlobalTracer()
-	opentracing.SetGlobalTracer(tracer)
 	span := tracer.StartSpan(method, spanOpts...)
 	defer span.Finish()
 
-	// 获取gRPC附带信息
+	// 获取gRPC Client的附带信息
 	md, ok := metadata.FromOutgoingContext(ctx)
 	if !ok {
 		md = metadata.New(nil)

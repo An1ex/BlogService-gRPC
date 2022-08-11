@@ -43,9 +43,10 @@ func (a *Auth) Authentication(ctx context.Context) error {
 }
 
 func (t *TagServer) GetTagList(ctx context.Context, r *pb.GetTagListRequest) (*pb.GetTagListResponse, error) {
-	if err := t.auth.Authentication(ctx); err != nil {
-		return nil, err
-	}
+	// gRPC调用方法的身份验证
+	//if err := t.auth.Authentication(ctx); err != nil {
+	//	return nil, err
+	//}
 
 	bApi := api.NewAPI("http://localhost:8080")
 	body, err := bApi.GetTagList(ctx, r.GetName(), uint8(r.GetState()))

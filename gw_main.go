@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"flag"
+	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"BlogService-gRPC/internal/middleware"
 	"BlogService-gRPC/pb"
 	"BlogService-gRPC/server"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/opentracing/opentracing-go"
+	"github.com/uber/jaeger-client-go/config"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
@@ -69,16 +73,44 @@ func runGrpcServer() *grpc.Server {
 }
 
 func runGrpcGatewayServer() *runtime.ServeMux {
-	endpoint := "0.0.0.0:" + sPort
+	endpoint := ":" + sPort
 	gwmux := runtime.NewServeMux()
 	dopts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 	_ = pb.RegisterTagServiceHandlerFromEndpoint(context.Background(), gwmux, endpoint, dopts)
 	return gwmux
 }
 
-func main() {
-	err := RunServer(sPort)
+func NewJaegerTracer(serviceName, agentHostPort string) (opentracing.Tracer, io.Closer, error) {
+	cfg := &config.Configuration{
+		ServiceName: serviceName,
+		Sampler: &config.SamplerConfig{
+			Type:  "const",
+			Param: 1,
+		},
+		Reporter: &config.ReporterConfig{
+			LogSpans:            true,
+			BufferFlushInterval: 1 * time.Second,
+			LocalAgentHostPort:  agentHostPort,
+		},
+	}
+	tracer, closer, err := cfg.NewTracer()
 	if err != nil {
-		log.Fatalf("Run Serve err: %v", err)
+		return nil, nil, nil
+	}
+	opentracing.SetGlobalTracer(tracer)
+	return tracer, closer, nil
+}
+
+func main() {
+	tracer, closer, err := NewJaegerTracer("blog-service-grpc-server", "localhost:6831")
+	if err != nil {
+		log.Fatalf("Jaeger init err: %s", err.Error())
+	}
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+
+	err = RunServer(sPort)
+	if err != nil {
+		log.Fatalf("Run Serve err: %s", err.Error())
 	}
 }
