@@ -11,6 +11,7 @@ import (
 
 	"BlogService-gRPC/internal/middleware"
 	"BlogService-gRPC/pb"
+	"BlogService-gRPC/pkg/etcd"
 	"BlogService-gRPC/server"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -33,6 +34,22 @@ func init() {
 	flag.Parse()
 }
 
+const ServiceName = "tag-service"
+
+func main() {
+	tracer, closer, err := NewJaegerTracer("blog-service-grpc-server", "localhost:6831")
+	if err != nil {
+		log.Fatalf("Jaeger init err: %s", err.Error())
+	}
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+
+	err = RunServer(sPort)
+	if err != nil {
+		log.Fatalf("Run Serve err: %s", err.Error())
+	}
+}
+
 func grpcHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Handler {
 	return h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
@@ -48,6 +65,14 @@ func RunServer(port string) error {
 	grpcS := runGrpcServer()
 	gatewayMux := runGrpcGatewayServer()
 	httpMux.Handle("/", gatewayMux)
+
+	etcdReg, err := etcd.NewEtcdRegister()
+	if err != nil {
+		return err
+	}
+	defer etcdReg.Close()
+	etcdReg.RegisterServer("/etcd/blog-service/grpc/"+ServiceName, "localhost:"+port, 5)
+
 	return http.ListenAndServe(":"+port, grpcHandlerFunc(grpcS, httpMux))
 }
 
@@ -99,18 +124,4 @@ func NewJaegerTracer(serviceName, agentHostPort string) (opentracing.Tracer, io.
 	}
 	opentracing.SetGlobalTracer(tracer)
 	return tracer, closer, nil
-}
-
-func main() {
-	tracer, closer, err := NewJaegerTracer("blog-service-grpc-server", "localhost:6831")
-	if err != nil {
-		log.Fatalf("Jaeger init err: %s", err.Error())
-	}
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
-
-	err = RunServer(sPort)
-	if err != nil {
-		log.Fatalf("Run Serve err: %s", err.Error())
-	}
 }

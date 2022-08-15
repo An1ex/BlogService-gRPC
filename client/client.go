@@ -18,14 +18,14 @@ import (
 
 var port string
 
-type Auth struct {
-	AppKey    string
-	AppSecret string
-}
-
 func init() {
 	flag.StringVar(&port, "port", "9002", "启动端口号")
 	flag.Parse()
+}
+
+type Auth struct {
+	AppKey    string
+	AppSecret string
 }
 
 func (a *Auth) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
@@ -34,6 +34,21 @@ func (a *Auth) GetRequestMetadata(ctx context.Context, uri ...string) (map[strin
 
 func (a *Auth) RequireTransportSecurity() bool {
 	return false
+}
+
+func main() {
+	tracer, closer, err := NewJaegerTracer("blog-service-grpc-client", "localhost:6831")
+	if err != nil {
+		log.Fatalf("Jaeger init err: %s", err.Error())
+	}
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+
+	resp, err := RunClient(port)
+	if err != nil {
+		log.Fatalf("Run client err; %s", err.Error())
+	}
+	log.Printf("resp:%v", resp)
 }
 
 func NewJaegerTracer(serviceName, agentHostPort string) (opentracing.Tracer, io.Closer, error) {
@@ -83,19 +98,4 @@ func RunClient(port string) (*pb.GetTagListResponse, error) {
 	})
 
 	return resp, nil
-}
-
-func main() {
-	tracer, closer, err := NewJaegerTracer("blog-service-grpc-client", "localhost:6831")
-	if err != nil {
-		log.Fatalf("Jaeger init err: %s", err.Error())
-	}
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
-
-	resp, err := RunClient(port)
-	if err != nil {
-		log.Fatalf("Run client err; %s", err.Error())
-	}
-	log.Printf("resp:%v", resp)
 }
